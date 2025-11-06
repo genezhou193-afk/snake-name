@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>🐍 贪吃蛇小游戏 v3.0</title>
+<style>
+  body {
+    background: #222;
+    color: #fff;
+    font-family: "Segoe UI", sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    margin: 0;
+  }
+  canvas {
+    background: #111;
+    border: 2px solid #444;
+    touch-action: none; /* 禁止浏览器滑动页面 */
+  }
+  #info {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    margin: 10px 0;
+  }
+  button {
+    background: #00aa66;
+    color: #fff;
+    border: none;
+    padding: 6px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: 0.2s;
+  }
+  button:hover { background: #00cc77; }
+</style>
+</head>
+<body>
+<h1>🐍 贪吃蛇小游戏 v3.0</h1>
+<div id="info">
+  <div id="score">得分：0</div>
+  <div id="level">关卡：1</div>
+  <div id="best">最高分：0</div>
+  <button id="restartBtn">重新开始</button>
+</div>
+<canvas id="game" width="400" height="400"></canvas>
+<p>电脑：↑ ↓ ← → 控制方向 | 手机：滑动操作</p>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+const box = 20;
+let snake, direction, food, score, bestScore, level, game;
+let obstacles = [];
+
+// 初始化
+function initGame() {
+  snake = [{x: 9*box, y: 10*box}];
+  direction = null;
+  food = randomFood();
+  score = 0;
+  level = 1;
+  obstacles = generateObstacles(level);
+  bestScore = localStorage.getItem("snake_best") || 0;
+  document.getElementById("score").innerText = "得分：" + score;
+  document.getElementById("best").innerText = "最高分：" + bestScore;
+  document.getElementById("level").innerText = "关卡：" + level;
+  if (game) clearInterval(game);
+  game = setInterval(draw, 150); // 第一关速度稍慢
+}
+
+function randomFood() {
+  let f;
+  do {
+    f = {x: Math.floor(Math.random()*19+1)*box, y: Math.floor(Math.random()*19+1)*box};
+  } while (isObstacle(f));
+  return f;
+}
+
+function generateObstacles(lv) {
+  const arr = [];
+  const count = lv * 4; // 每关增加障碍数量
+  for (let i = 0; i < count; i++) {
+    arr.push({
+      x: Math.floor(Math.random()*19+1)*box,
+      y: Math.floor(Math.random()*19+1)*box
+    });
+  }
+  return arr;
+}
+
+function isObstacle(pos) {
+  return obstacles.some(o => o.x === pos.x && o.y === pos.y);
+}
+
+document.addEventListener("keydown", e=>{
+  if (e.key==="ArrowLeft" && direction!=="RIGHT") direction="LEFT";
+  else if (e.key==="ArrowUp" && direction!=="DOWN") direction="UP";
+  else if (e.key==="ArrowRight" && direction!=="LEFT") direction="RIGHT";
+  else if (e.key==="ArrowDown" && direction!=="UP") direction="DOWN";
+});
+
+document.getElementById("restartBtn").addEventListener("click", initGame);
+
+// 手机触屏滑动控制
+let startX, startY;
+canvas.addEventListener("touchstart", e=>{
+  const t = e.touches[0];
+  startX = t.clientX;
+  startY = t.clientY;
+});
+canvas.addEventListener("touchmove", e=>{
+  e.preventDefault();
+});
+canvas.addEventListener("touchend", e=>{
+  const t = e.changedTouches[0];
+  const dx = t.clientX - startX;
+  const dy = t.clientY - startY;
+  if (Math.abs(dx) > Math.abs(dy)) {
+    if (dx > 0 && direction!=="LEFT") direction = "RIGHT";
+    else if (dx < 0 && direction!=="RIGHT") direction = "LEFT";
+  } else {
+    if (dy > 0 && direction!=="UP") direction = "DOWN";
+    else if (dy < 0 && direction!=="DOWN") direction = "UP";
+  }
+});
+
+function draw() {
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0,0,400,400);
+
+  // 绘制障碍
+  ctx.fillStyle = "#555";
+  obstacles.forEach(o=>{
+    ctx.fillRect(o.x, o.y, box, box);
+  });
+
+  // 绘制食物
+  ctx.fillStyle = "red";
+  ctx.fillRect(food.x, food.y, box, box);
+
+  // 绘制蛇
+  for(let i=0;i<snake.length;i++){
+    ctx.fillStyle = i===0 ? "#00FF88" : "#00AA66";
+    ctx.fillRect(snake[i].x, snake[i].y, box, box);
+  }
+
+  let headX = snake[0].x;
+  let headY = snake[0].y;
+
+  if (direction==="LEFT") headX -= box;
+  if (direction==="UP") headY -= box;
+  if (direction==="RIGHT") headX += box;
+  if (direction==="DOWN") headY += box;
+
+  if (headX === food.x && headY === food.y) {
+    score++;
+    document.getElementById("score").innerText = "得分：" + score;
+    food = randomFood();
+    // 每5分升一级
+    if (score % 5 === 0) {
+      level++;
+      document.getElementById("level").innerText = "关卡：" + level;
+      obstacles = generateObstacles(level);
+      clearInterval(game);
+      let speed = Math.max(60, 150 - level*10);
+      game = setInterval(draw, speed);
+    }
+  } else {
+    snake.pop();
+  }
+
+  const newHead = {x: headX, y: headY};
+
+  if (headX<0 || headX>=400 || headY<0 || headY>=400 || collision(newHead,snake) || isObstacle(newHead)) {
+    return gameOver();
+  }
+
+  snake.unshift(newHead);
+
+  if (score > bestScore) {
+    bestScore = score;
+    localStorage.setItem("snake_best", bestScore);
+    document.getElementById("best").innerText = "最高分：" + bestScore;
+  }
+}
+
+function collision(head,array){
+  return array.some(seg => seg.x===head.x && seg.y===head.y);
+}
+
+function gameOver(){
+  clearInterval(game);
+  ctx.fillStyle="white";
+  ctx.font="30px Arial";
+  ctx.fillText("游戏结束", 120, 200);
+  ctx.font="20px Arial";
+  ctx.fillText("点击“重新开始”再玩一次", 70, 240);
+}
+
+initGame();
+</script>
+</body>
+</html>
